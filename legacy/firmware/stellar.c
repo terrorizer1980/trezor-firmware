@@ -126,20 +126,20 @@ bool stellar_signingInit(const StellarSignTx *msg) {
   stellar_hashupdate_uint32(msg->memo_type);
   switch (msg->memo_type) {
     // None, nothing else to do
-    case 0:
+    case StellarMemoType_NONE:
       break;
     // Text: 4 bytes (size) + up to 28 bytes
-    case 1:
+    case StellarMemoType_TEXT:
       stellar_hashupdate_string((unsigned char *)&(msg->memo_text),
                                 strnlen(msg->memo_text, 28));
       break;
     // ID (8 bytes, uint64)
-    case 2:
+    case StellarMemoType_ID:
       stellar_hashupdate_uint64(msg->memo_id);
       break;
     // Hash and return are the same data structure (32 byte tx hash)
-    case 3:
-    case 4:
+    case StellarMemoType_HASH:
+    case StellarMemoType_RETURN:
       stellar_hashupdate_bytes(msg->memo_hash.bytes, msg->memo_hash.size);
       break;
     default:
@@ -791,7 +791,7 @@ bool stellar_confirmSetOptionsOp(const StellarSetOptionsOp *msg) {
     // 0 = account, 1 = pre-auth, 2 = hash(x)
     char str_signer_type[16] = {0};
     bool needs_hash_confirm = false;
-    if (msg->signer_type == 0) {
+    if (msg->signer_type == StellarSignerType_ACCOUNT) {
       strlcpy(str_signer_type, _("account"), sizeof(str_signer_type));
       strlcat(str_title, str_signer_type, sizeof(str_title));
 
@@ -805,7 +805,7 @@ bool stellar_confirmSetOptionsOp(const StellarSetOptionsOp *msg) {
         return false;
       }
     }
-    if (msg->signer_type == 1) {
+    if (msg->signer_type == StellarSignerType_PRE_AUTH) {
       needs_hash_confirm = true;
       strlcpy(str_signer_type, _("pre-auth hash"), sizeof(str_signer_type));
       strlcat(str_title, str_signer_type, sizeof(str_title));
@@ -817,7 +817,7 @@ bool stellar_confirmSetOptionsOp(const StellarSetOptionsOp *msg) {
         return false;
       }
     }
-    if (msg->signer_type == 2) {
+    if (msg->signer_type == StellarSignerType_HASH) {
       needs_hash_confirm = true;
       strlcpy(str_signer_type, _("hash(x)"), sizeof(str_signer_type));
       strlcat(str_title, str_signer_type, sizeof(str_title));
@@ -973,13 +973,13 @@ bool stellar_confirmAllowTrustOp(const StellarAllowTrustOp *msg) {
   // asset type
   stellar_hashupdate_uint32(msg->asset_type);
   // asset code
-  if (msg->asset_type == 1) {
+  if (msg->asset_type == StellarAssetType_ALPHANUM4) {
     char code4[4 + 1] = {0};
     memzero(code4, sizeof(code4));
     strlcpy(code4, msg->asset_code, sizeof(code4));
     stellar_hashupdate_bytes((uint8_t *)code4, 4);
   }
-  if (msg->asset_type == 2) {
+  if (msg->asset_type == StellarAssetType_ALPHANUM12) {
     char code12[12 + 1] = {0};
     memzero(code12, sizeof(code12));
     strlcpy(code12, msg->asset_code, sizeof(code12));
@@ -1288,7 +1288,7 @@ const char **stellar_lineBreakAddress(const uint8_t *addrbytes) {
  *  MOBI (G123456789000)
  *  ALPHA12EXAMP (G0987)
  */
-void stellar_format_asset(const StellarAssetType *asset, char *str_formatted,
+void stellar_format_asset(const StellarAsset *asset, char *str_formatted,
                           size_t len) {
   char str_asset_code[12 + 1] = {0};
   // truncated asset issuer, final length depends on length of asset code
@@ -1299,17 +1299,17 @@ void stellar_format_asset(const StellarAssetType *asset, char *str_formatted,
   memzero(str_asset_issuer_trunc, sizeof(str_asset_issuer_trunc));
 
   // Validate issuer account for non-native assets
-  if (asset->type != 0 && !stellar_validateAddress(asset->issuer)) {
+  if (asset->type != StellarAssetType_NATIVE && !stellar_validateAddress(asset->issuer)) {
     stellar_signingAbort(_("Invalid asset issuer"));
     return;
   }
 
   // Native asset
-  if (asset->type == 0) {
+  if (asset->type == StellarAssetType_NATIVE) {
     strlcpy(str_formatted, _("XLM (native asset)"), len);
   }
   // 4-character custom
-  if (asset->type == 1) {
+  if (asset->type == StellarAssetType_ALPHANUM4) {
     memcpy(str_asset_code, asset->code, 4);
     strlcpy(str_formatted, str_asset_code, len);
 
@@ -1317,7 +1317,7 @@ void stellar_format_asset(const StellarAssetType *asset, char *str_formatted,
     memcpy(str_asset_issuer_trunc, asset->issuer, 13);
   }
   // 12-character custom
-  if (asset->type == 2) {
+  if (asset->type == StellarAssetType_ALPHANUM12) {
     memcpy(str_asset_code, asset->code, 12);
     strlcpy(str_formatted, str_asset_code, len);
 
@@ -1325,7 +1325,7 @@ void stellar_format_asset(const StellarAssetType *asset, char *str_formatted,
     memcpy(str_asset_issuer_trunc, asset->issuer, 5);
   }
   // Issuer is read the same way for both types of custom assets
-  if (asset->type == 1 || asset->type == 2) {
+  if (asset->type == StellarAssetType_ALPHANUM4 || asset->type == StellarAssetType_ALPHANUM12) {
     strlcat(str_formatted, _(" ("), len);
     strlcat(str_formatted, str_asset_issuer_trunc, len);
     strlcat(str_formatted, _(")"), len);
@@ -1546,19 +1546,19 @@ void stellar_hashupdate_address(const uint8_t *address_bytes) {
  * a typical string, so if "TEST" is the asset code then the hashed value needs
  * to be 4 bytes and not include the null at the end of the string
  */
-void stellar_hashupdate_asset(const StellarAssetType *asset) {
+void stellar_hashupdate_asset(const StellarAsset *asset) {
   stellar_hashupdate_uint32(asset->type);
 
   // For non-native assets, validate issuer account and convert to bytes
   uint8_t issuer_bytes[STELLAR_KEY_SIZE] = {0};
-  if (asset->type != 0 &&
+  if (asset->type != StellarAssetType_NATIVE &&
       !stellar_getAddressBytes(asset->issuer, issuer_bytes)) {
     stellar_signingAbort(_("Invalid asset issuer"));
     return;
   }
 
   // 4-character asset code
-  if (asset->type == 1) {
+  if (asset->type == StellarAssetType_ALPHANUM4) {
     char code4[4 + 1] = {0};
     memzero(code4, sizeof(code4));
     strlcpy(code4, asset->code, sizeof(code4));
@@ -1568,7 +1568,7 @@ void stellar_hashupdate_asset(const StellarAssetType *asset) {
   }
 
   // 12-character asset code
-  if (asset->type == 2) {
+  if (asset->type == StellarAssetType_ALPHANUM12) {
     char code12[12 + 1] = {0};
     memzero(code12, sizeof(code12));
     strlcpy(code12, asset->code, sizeof(code12));
@@ -1628,15 +1628,13 @@ void stellar_layoutTransactionSummary(const StellarSignTx *msg) {
   // Reset lines for displaying memo
   memzero(str_lines, sizeof(str_lines));
 
-  // Memo: none
-  if (msg->memo_type == 0) {
+  if (msg->memo_type == StellarMemoType_NONE) {
     strlcpy(str_lines[0], _("[No Memo Set]"), sizeof(str_lines[0]));
     strlcpy(str_lines[1], _("Important:"), sizeof(str_lines[0]));
     strlcpy(str_lines[2], _("Many exchanges require"), sizeof(str_lines[0]));
     strlcpy(str_lines[3], _("a memo when depositing."), sizeof(str_lines[0]));
   }
-  // Memo: text
-  if (msg->memo_type == 1) {
+  if (msg->memo_type == StellarMemoType_TEXT) {
     strlcpy(str_lines[0], _("Memo (TEXT)"), sizeof(str_lines[0]));
 
     // Split 28-character string into two lines of 19 / 9
@@ -1644,18 +1642,15 @@ void stellar_layoutTransactionSummary(const StellarSignTx *msg) {
     strlcpy(str_lines[1], (const char *)msg->memo_text, 19 + 1);
     strlcpy(str_lines[2], (const char *)(msg->memo_text + 19), 9 + 1);
   }
-  // Memo: ID
-  if (msg->memo_type == 2) {
+  if (msg->memo_type == StellarMemoType_ID) {
     strlcpy(str_lines[0], _("Memo (ID)"), sizeof(str_lines[0]));
     stellar_format_uint64(msg->memo_id, str_lines[1], sizeof(str_lines[1]));
   }
-  // Memo: hash
-  if (msg->memo_type == 3) {
+  if (msg->memo_type == StellarMemoType_HASH) {
     needs_memo_hash_confirm = 1;
     strlcpy(str_lines[0], _("Memo (HASH)"), sizeof(str_lines[0]));
   }
-  // Memo: return
-  if (msg->memo_type == 4) {
+  if (msg->memo_type == StellarMemoType_RETURN) {
     needs_memo_hash_confirm = 1;
     strlcpy(str_lines[0], _("Memo (RETURN)"), sizeof(str_lines[0]));
   }
