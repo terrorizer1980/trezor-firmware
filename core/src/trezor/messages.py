@@ -4621,8 +4621,8 @@ if TYPE_CHECKING:
         source_account: "str"
         fee: "int"
         sequence_number: "int"
-        timebounds_start: "int | None"
-        timebounds_end: "int | None"
+        timebounds_start: "int"
+        timebounds_end: "int"
         memo_type: "StellarMemoType"
         memo_text: "str | None"
         memo_id: "int | None"
@@ -4636,11 +4636,11 @@ if TYPE_CHECKING:
             source_account: "str",
             fee: "int",
             sequence_number: "int",
+            timebounds_start: "int",
+            timebounds_end: "int",
             memo_type: "StellarMemoType",
             num_operations: "int",
             address_n: "list[int] | None" = None,
-            timebounds_start: "int | None" = None,
-            timebounds_end: "int | None" = None,
             memo_text: "str | None" = None,
             memo_id: "int | None" = None,
             memo_hash: "bytes | None" = None,
