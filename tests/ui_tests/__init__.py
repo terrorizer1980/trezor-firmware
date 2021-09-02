@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from _pytest.outcomes import Failed
+from PIL import Image
 
 from .reporting import testreport
 
@@ -45,13 +46,22 @@ def _rename_records(screen_path):
         record.replace(screen_path / f"{index:08}.png")
 
 
-def _hash_files(path):
+def _hash_files(path: Path) -> str:
     files = path.iterdir()
     hasher = hashlib.sha256()
     for file in sorted(files):
-        hasher.update(file.read_bytes())
+        hasher.update(_get_bytes_from_png(str(file)))
 
     return hasher.digest().hex()
+
+
+def _get_bytes_from_png(png_file: str) -> bytes:
+    """Decode a PNG file into bytes representing all the pixels.
+
+    Is necessary because Linux and Mac are using different PNG encoding libraries,
+    and we need the file hashes to be the same on both platforms.
+    """
+    return Image.open(png_file).tobytes()
 
 
 def _process_tested(fixture_test_path, test_name):
