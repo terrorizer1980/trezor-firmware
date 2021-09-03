@@ -12,6 +12,7 @@ from PIL import Image
 from .reporting import testreport
 
 UI_TESTS_DIR = Path(__file__).parent.resolve()
+SCREENS_DIR = UI_TESTS_DIR / "screens"
 HASH_FILE = UI_TESTS_DIR / "fixtures.json"
 SUGGESTION_FILE = UI_TESTS_DIR / "fixtures.suggestion.json"
 FILE_HASHES = {}
@@ -95,7 +96,7 @@ def _process_tested(fixture_test_path, test_name):
 def screen_recording(client, request):
     test_ui = request.config.getoption("ui")
     test_name = get_test_name(request.node.nodeid)
-    screens_test_path = UI_TESTS_DIR / "screens" / test_name
+    screens_test_path = SCREENS_DIR / test_name
 
     if test_ui == "record":
         screen_path = screens_test_path / "recorded"
@@ -154,7 +155,7 @@ def _get_fixtures_content(fixtures: dict, remove_missing: bool):
 
 def main():
     read_fixtures()
-    for record in (UI_TESTS_DIR / "screens").iterdir():
+    for record in SCREENS_DIR.iterdir():
         if not (record / "actual").exists():
             continue
 
